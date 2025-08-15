@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'crm',
     'graphene_django',
     'graphql_jwt.refresh_token.apps.RefreshTokenConfig',
+    'django_filters'
 ]
 
 AUTHENTICATION_BACKENDS = [

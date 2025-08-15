@@ -1,3 +1,4 @@
+import uuid
 import graphene
 from graphene_django import DjangoObjectType
 from django.contrib.auth import get_user_model, authenticate
@@ -12,6 +13,8 @@ from graphene.types import JSONString
 from graphene_django.filter import DjangoFilterConnectionField
 from django.db import transaction, IntegrityError
 from decimal import Decimal
+from django.utils import timezone
+from .filters import CustomerFilter, ProductFilter, OrderFilter
 
 User = get_user_model()
 
@@ -56,20 +59,27 @@ class UserType(DjangoObjectType):
     fields = ("id", 'user','email', 'username', 'first_name', 'last_name', 'is_staff')
     
 class CustomerType(DjangoObjectType):
+  uuid = graphene.String()
   class Meta:
     model = Customer
     fields = "__all__"
     filter_fields = ['name', 'email', 'phone']
     interfaces = (graphene.relay.Node,)
     
+  def resolve_uuid(self, info):
+      return str(self.id)  #
+
 class ProductType(DjangoObjectType):
+  uuid = graphene.String()
   class Meta:
     model = Product
     fields = "__all__"
     filter_fields = ['name', 'price', 'stock']
     interfaces = (graphene.relay.Node,)
-    
-    
+
+  def resolve_uuid(self, info):
+      return str(self.product_id)  #
+
 class OrderType(DjangoObjectType):
   class Meta:
     model = Order
@@ -80,14 +90,14 @@ class OrderType(DjangoObjectType):
 class Query(graphene.ObjectType):
     users = graphene.List(UserType)
     customer = graphene.relay.Node.Field(CustomerType)
-    all_customers = DjangoFilterConnectionField(CustomerType)
+    all_customers = DjangoFilterConnectionField(CustomerType, filterset_class=CustomerFilter, order_by=graphene.List(graphene.String))
     
     product = graphene.relay.Node.Field(ProductType)
-    all_products = DjangoFilterConnectionField(ProductType)
+    all_products = DjangoFilterConnectionField(ProductType, filterset_class=ProductFilter, order_by=graphene.List(graphene.String))
 
     order = graphene.relay.Node.Field(OrderType)
-    all_orders = DjangoFilterConnectionField(OrderType)
-    
+    all_orders = DjangoFilterConnectionField(OrderType, filterset_class=OrderFilter, order_by=graphene.List(graphene.String))
+
 class ErrorType(graphene.ObjectType):
     field = graphene.String()
     message = graphene.String()
@@ -372,12 +382,11 @@ class CreateProduct(graphene.Mutation):
             return CreateProduct(success=False, message="Product creation failed.", errors=errors)
           
           
-
 class CreateOrder(graphene.Mutation):
     class Arguments:
-        customer_id = graphene.ID(required=True)
-        product_ids = graphene.List(graphene.ID, required=True)
         order_date = graphene.DateTime(required=False)
+        customer_uuid = graphene.String(required=True)
+        product_uuids = graphene.List(graphene.String, required=True)
 
     # Output = graphene.relay.ClientIDMutation.Output
     order = graphene.Field(OrderType)
@@ -385,27 +394,32 @@ class CreateOrder(graphene.Mutation):
     message = graphene.String()
     errors = graphene.List(ErrorType)
 
-    def mutate(self, info, customer_id, product_ids, order_date=None):
+    def mutate(self, info, customer_uuid, product_uuids, order_date=None):
         errors = []
         
         try:
-            print(f"Looking up customer with ID: {customer_id}")
-            customer = Customer.objects.get(id=customer_id)
-            print(f"Customer found: {self.Field(customer)}")
+            customer = Customer.objects.get(id=customer_uuid)
         except Customer.DoesNotExist:
             errors.append(ErrorType(field="customer_id", message="Invalid customer ID."))
 
-        if not product_ids:
+        if not product_uuids:
             errors.append(ErrorType(field="product_ids", message="At least one product must be selected."))
+
+        validated_product_uuids = []
+        for pid in product_uuids:
+            try:
+                validated_product_uuids.append(pid)
+            except ValueError:
+                errors.append(ErrorType(field="product_ids", message=f"Invalid UUID format for product ID: {pid}"))
         
         products = []
         total_amount = Decimal('0.00')
-        if product_ids:
-            fetched_products = Product.objects.filter(id__in=product_ids)
-            if fetched_products.count() != len(product_ids):
-                # This means some product IDs were not found
-                found_ids = {str(p.id) for p in fetched_products}
-                invalid_ids = [pid for pid in product_ids if pid not in found_ids]
+        if validated_product_uuids:
+            fetched_products = Product.objects.filter(product_id__in=validated_product_uuids)
+            print(f"Fetched products: {fetched_products}")
+            if fetched_products.count() != len(validated_product_uuids):
+                found_ids = {str(p.product_id) for p in fetched_products}
+                invalid_ids = [pid for pid in validated_product_uuids if pid not in found_ids]
                 for inv_id in invalid_ids:
                     errors.append(ErrorType(field="product_ids", message=f"Product with ID '{inv_id}' not found."))
             
@@ -421,7 +435,7 @@ class CreateOrder(graphene.Mutation):
                 order = Order.objects.create(
                     customer_id=customer,
                     quantity=len(products),
-                    order_date=order_date if order_date else graphene.DateTime.now()
+                    order_date=order_date or timezone.now(),
                 )
                 order.product_ids.set(products)
                 order.total_amount = total_amount
