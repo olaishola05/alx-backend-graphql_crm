@@ -10,11 +10,17 @@ from django.core.validators import validate_email
 import re
 from graphene.types import JSONString
 from graphene_django.filter import DjangoFilterConnectionField
-from graphql import GraphQLError
 from django.db import transaction, IntegrityError
 from decimal import Decimal
 
 User = get_user_model()
+
+def validate_phone_number(phone):
+    """Validate phone number format."""
+    phone_regex = r"^(?:\+?\d{10,15}|\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})$"
+    if not re.fullmatch(phone_regex, phone):
+        return "Invalid phone format. Use formats like +1234567890 or 123-456-7890."
+    return None
 
 def validate_password_strength(password):
     """Custom password strength validation"""
@@ -72,7 +78,6 @@ class OrderType(DjangoObjectType):
     interfaces = (graphene.relay.Node,)
      
 class Query(graphene.ObjectType):
-    hello = graphene.String(default_value="Hello, GraphQL!")
     users = graphene.List(UserType)
     customer = graphene.relay.Node.Field(CustomerType)
     all_customers = DjangoFilterConnectionField(CustomerType)
@@ -83,46 +88,6 @@ class Query(graphene.ObjectType):
     order = graphene.relay.Node.Field(OrderType)
     all_orders = DjangoFilterConnectionField(OrderType)
     
-    # @login_required
-    # def resolve_users(self, info):
-      # user = info.context.user
-      # print("Logged user:", user.is_authenticated)
-      # if user.is_authenticated:
-        # return User.objects.all()
-    # 
-    # def resolve_customers(self, info):
-      # return Customer.objects.all()
-    # 
-    # def resolve_customer_by_id(self, info, id):
-      # try:
-        # return Customer.objects.get(id=id)
-      # except Customer.DoesNotExist:
-        # return None
-    # def resolve_products(self, info):
-      # return Product.objects.all()
-    # 
-    # def resolve_product_by_id(self, info, id):
-      # try:
-        # return Product.objects.get(product_id=id)
-      # except Product.DoesNotExist:
-        # return 'Product deos not exist'
-    # 
-    # def resolve_orders(self, info):
-      # return Order.objects.all()
-    # 
-    # def resolve_order_by_id(self, info, id):
-      # try:
-        # return Order.objects.get(order_id=id)
-      # except Order.DoesNotExist:
-        # return 'Order does not exist or not found'
-      # 
-      # 
-    # def resolve_order_by_customer(self, info, customer_id):
-      # try:
-        # return Order.objects.all().filter(customer_id=customer_id)
-      # except Customer.DoesNotExist:
-        # return f"Customer with {customer_id} does not exist or found!"
-
 class ErrorType(graphene.ObjectType):
     field = graphene.String()
     message = graphene.String()
@@ -272,8 +237,9 @@ class CreateCustomer(graphene.Mutation):
         if Customer.objects.filter(email=email).exists():
             errors.append(ErrorType(field="email", message="Email already exists."))
         if phone:
-            if not re.fullmatch(r"^\+?\d{1,3}[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$", phone):
-                errors.append(ErrorType(field="phone", message="Invalid phone format. Use formats like +1234567890 or 123-456-7890."))
+            phone_error = validate_phone_number(phone)
+            if phone_error:
+                errors.append(ErrorType(field="phone", message=phone_error))
 
         if errors:
             return CreateCustomer(success=False, message="Validation failed.", errors=errors)
@@ -326,8 +292,9 @@ class BulkCreateCustomers(graphene.Mutation):
                 record_errors.append(ErrorType(field="email", message="Email already exists."))
 
             if phone:
-                if not re.fullmatch(r"^\+?\d{1,3}[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$", phone):
-                    record_errors.append(ErrorType(field="phone", message="Invalid phone format. Use formats like +1234567890 or 123-456-7890."))
+                phone_error = validate_phone_number(phone)
+                if phone_error:
+                    record_errors.append(ErrorType(field="phone", message=phone_error))
 
             if record_errors:
                 for error in record_errors:
@@ -422,7 +389,9 @@ class CreateOrder(graphene.Mutation):
         errors = []
         
         try:
+            print(f"Looking up customer with ID: {customer_id}")
             customer = Customer.objects.get(id=customer_id)
+            print(f"Customer found: {self.Field(customer)}")
         except Customer.DoesNotExist:
             errors.append(ErrorType(field="customer_id", message="Invalid customer ID."))
 
@@ -451,6 +420,7 @@ class CreateOrder(graphene.Mutation):
             with transaction.atomic():
                 order = Order.objects.create(
                     customer_id=customer,
+                    quantity=len(products),
                     order_date=order_date if order_date else graphene.DateTime.now()
                 )
                 order.product_ids.set(products)
@@ -467,10 +437,11 @@ class Mutation(graphene.ObjectType):
   login = LoginMutation.Field()
   register = RegisterMutation.Field()
   create_customer = CreateCustomer.Field()
+  bulk_create_customers = BulkCreateCustomers.Field()
+  create_product = CreateProduct.Field()
+  create_order = CreateOrder.Field()
   token = graphql_jwt.ObtainJSONWebToken.Field()
   verify_token = graphql_jwt.Verify.Field()
   refresh_token = graphql_jwt.Refresh.Field()
   delete_token_cookie = graphql_jwt.DeleteJSONWebTokenCookie.Field()
 
-
-schema = graphene.Schema(query=Query, mutation=Mutation)
