@@ -43,7 +43,12 @@ INSTALLED_APPS = [
     'crm',
     'graphene_django',
     'graphql_jwt.refresh_token.apps.RefreshTokenConfig',
-    'django_filters'
+    'django_filters',
+    'django_crontab'
+]
+
+CRONJOBS = [
+  ('*/5 * * * *', 'crm.cron.log_crm_heartbeat')
 ]
 
 AUTHENTICATION_BACKENDS = [
