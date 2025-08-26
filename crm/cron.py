@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 import asyncio
-
+from gql.transport.requests import RequestsHTTPTransport
 
 async def log_crm_heartbeat():
   HEART_BEAT_LOG = "/tmp/crm_heartbeat_log.txt"
