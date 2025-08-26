@@ -16,6 +16,8 @@ from decimal import Decimal
 from django.utils import timezone
 from .filters import CustomerFilter, ProductFilter, OrderFilter
 
+# from crm.models import Product
+
 User = get_user_model()
 
 def validate_phone_number(phone):
