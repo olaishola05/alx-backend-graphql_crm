@@ -446,6 +446,35 @@ class CreateOrder(graphene.Mutation):
             errors.append(ErrorType(field="__all__", message=f"An unexpected error occurred: {str(e)}"))
             return CreateOrder(success=False, message="Order creation failed.", errors=errors)
 
+
+class UpdateLowStockProducts(graphene.Mutation):
+    class Arguments:
+        threshold = graphene.Int(required=True)
+
+    updated_count = graphene.Int()
+    low_stock_products = graphene.List(ProductType)
+    message = graphene.String()
+    errors = graphene.List(ErrorType)
+
+    def mutate(self, info, threshold):
+        errors = []
+        if threshold < 0:
+            errors.append(ErrorType(field="threshold", message="Threshold cannot be negative."))
+
+        if errors:
+            return UpdateLowStockProducts(updated_count=0, message="Validation failed.", errors=errors)
+
+        try:
+            low_stock_products = Product.objects.filter(stock__lt=threshold)
+            count = low_stock_products.count()
+            for product in low_stock_products:
+                product.stock += 10
+                product.save()
+
+            return UpdateLowStockProducts(updated_count=count, low_stock_products=low_stock_products, message=f"Updated {count} products.", errors=[])
+        except Exception as e:
+            errors.append(ErrorType(field="__all__", message=f"An unexpected error occurred: {str(e)}"))
+            return UpdateLowStockProducts(updated_count=0, low_stock_products=[], message="Update failed.", errors=errors)
 class Mutation(graphene.ObjectType):
     
   login = LoginMutation.Field()
@@ -453,6 +482,7 @@ class Mutation(graphene.ObjectType):
   create_customer = CreateCustomer.Field()
   bulk_create_customers = BulkCreateCustomers.Field()
   create_product = CreateProduct.Field()
+  update_low_stock_products = UpdateLowStockProducts.Field()
   create_order = CreateOrder.Field()
   token = graphql_jwt.ObtainJSONWebToken.Field()
   verify_token = graphql_jwt.Verify.Field()
