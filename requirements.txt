@@ -10,12 +10,15 @@ click==8.2.1
 click-didyoumean==0.3.1
 click-plugins==1.1.1.2
 click-repl==0.3.0
+cron_descriptor==2.0.5
 Django==5.2.5
+django-celery-beat==2.8.1
 django-cors-headers==4.7.0
 django-crontab==0.7.1
 django-environ==0.12.0
 django-filter==25.1
 django-graphql-jwt==0.4.0
+django-timezone-field==7.1
 djangorestframework==3.16.1
 gql==4.0.0
 graphene==3.4.3
@@ -30,6 +33,7 @@ promise==2.3
 prompt_toolkit==3.0.51
 propcache==0.3.2
 PyJWT==2.10.1
+python-crontab==3.3.0
 python-dateutil==2.9.0.post0
 redis==6.4.0
 requests==2.32.5
