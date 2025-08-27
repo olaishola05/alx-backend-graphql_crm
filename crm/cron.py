@@ -30,7 +30,7 @@ async def log_crm_heartbeat():
 
 
 async def update_low_stock():
-    transport = AIOHTTPTransport(url="http://localhost:8000/graphql/")
+    transport = RequestsHTTPTransport(url="http://localhost:8000/graphql/")
     LOW_STOCK_LOGS = "/tmp/low_stock_updates_log.txt"
     async with Client(transport=transport, fetch_schema_from_transport=True) as session:
         mutation = gql(

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 import asyncio
+import requests
 
 logger = logging.getLogger(__name__)
 
